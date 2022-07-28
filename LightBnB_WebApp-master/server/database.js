@@ -91,16 +91,68 @@ exports.getAllReservations = getAllReservations;
  * @return {Promise<[{}]>}  A promise to the properties.
  */
  const getAllProperties = (options, limit = 10) => {
-  console.log(options)
-  return pool
-  .query(`SELECT * FROM properties LIMIT $1`, [limit])
-  .then((result) => {
-    console.log(result.rows)
-    return(result.rows);
-  })
-    .catch((err) => {
-      console.log("____", err.message);
-    });
+ 
+  const queryParams = [];
+
+  let queryString = `
+  SELECT properties.*, avg(property_reviews.rating) as average_rating
+  FROM properties
+  JOIN property_reviews ON properties.id = property_id
+  `;
+
+  let clause;
+  // helper function
+  const queryClause = arr => arr.length === 1 ? clause = 'WHERE' : clause = 'AND';
+
+
+  // filter conditions based on city, minimum and maximum cost, and minimum rating
+  if (options.city) {
+
+    queryParams.push(`%${options.city}%`);
+    queryString += `WHERE city LIKE $${queryParams.length} `;
+  }
+
+  if (options.owner_id) {
+
+    queryParams.push(`${options.owner_id}`);
+    queryClause(queryParams);
+    queryString += `${clause} owner_id = $${queryParams.length} `;
+  }
+
+  if (options.minimum_price_per_night) {
+
+    queryParams.push(`${options.minimum_price_per_night}`);
+    queryClause(queryParams);
+    queryString += `${clause} cost_per_night >= $${queryParams.length} `;
+  }
+
+  if (options.maximum_price_per_night) {
+
+    queryParams.push(`${options.maximum_price_per_night}`);
+    queryClause(queryParams);
+    queryString += `${clause} cost_per_night <= $${queryParams.length} `;
+  }
+  
+  if (options.minimum_rating) {
+
+    queryParams.push(`${options.minimum_rating}`);
+    queryClause(queryParams);
+    queryString += `${clause} rating >= $${queryParams.length} `;
+  }
+
+
+  queryParams.push(limit);
+  queryString += `
+  GROUP BY properties.id
+  ORDER BY cost_per_night
+  LIMIT $${queryParams.length};
+  `;
+
+ 
+  console.log(queryString, queryParams);
+
+
+  return pool.query(queryString, queryParams).then((res) => res.rows);
 };
 exports.getAllProperties = getAllProperties;
 
